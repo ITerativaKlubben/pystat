@@ -9,6 +9,9 @@ def most_changed_files(repo):
     for commit in repo.iter_commits():
         for file in commit.stats.files.keys():
             file_changes[file] += 1
-
-    plot_most_changed_files(file_changes)
+    
+    print("Most frequently changed files:")
+    for file, count in file_changes.most_common(10):
+        print(f"{file}: {count} changes") 
+    
 

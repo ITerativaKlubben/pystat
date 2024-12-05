@@ -18,7 +18,7 @@ def commit_times_by_hour(repo):
     # Count occurrences of each hour
     hour_counts = Counter(commit_hours)
     
-    plot_commit_times_by_hour(hour_counts)
+    # plot_commit_times_by_hour(hour_counts)
     # Sort by hour
     sorted_hours = sorted(hour_counts.items())
 
