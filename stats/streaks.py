@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
 def longest_streak(repo, since="2024-01-01", until=None):
-    """Find the longest consecutive days with at least one commit."""
+    """Return dict with best_streak, best_start, best_end, total_days_with_commits (or None)."""
     since_date = datetime.strptime(since, "%Y-%m-%d")
     until_date = datetime.strptime(until, "%Y-%m-%d") if until else None
     commit_days = set()
@@ -11,8 +11,7 @@ def longest_streak(repo, since="2024-01-01", until=None):
         commit_days.add(day)
 
     if not commit_days:
-        print("No commits found in the given date range.")
-        return
+        return None
 
     sorted_days = sorted(commit_days)
     best_streak = 1
@@ -35,5 +34,9 @@ def longest_streak(repo, since="2024-01-01", until=None):
         best_start = current_start
 
     best_end = best_start + timedelta(days=best_streak - 1)
-    print(f"Longest commit streak: {best_streak} days ({best_start} to {best_end})")
-    print(f"Total days with commits: {len(commit_days)}")
+    return {
+        "best_streak": best_streak,
+        "best_start": str(best_start),
+        "best_end": str(best_end),
+        "total_days_with_commits": len(commit_days),
+    }

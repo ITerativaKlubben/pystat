@@ -1,11 +1,10 @@
 from datetime import datetime
 
 def first_time_contributors(repo, since="2024-01-01", until=None):
-    """Print authors whose first-ever commit falls within the date range."""
+    """Return dict of author -> first commit date string for new contributors in range."""
     since_date = datetime.strptime(since, "%Y-%m-%d").date()
     until_date = datetime.strptime(until, "%Y-%m-%d").date() if until else None
 
-    # Scan full history to find each author's true first commit
     first_commit = {}
     for commit in repo.iter_commits():
         author = commit.author.name
@@ -14,19 +13,11 @@ def first_time_contributors(repo, since="2024-01-01", until=None):
             first_commit[author] = date
 
     if not first_commit:
-        print("No commits found.")
-        return
+        return {}
 
-    # Filter to authors whose first commit is within the date range
     new_contributors = {
-        author: date for author, date in first_commit.items()
+        author: str(date) for author, date in first_commit.items()
         if date >= since_date and (until_date is None or date <= until_date)
     }
 
-    if not new_contributors:
-        print("No new contributors in this period.")
-        return
-
-    print("New contributors in this period:")
-    for author, date in sorted(new_contributors.items(), key=lambda x: x[1]):
-        print(f"  {author}: {date}")
+    return new_contributors

@@ -1,22 +1,20 @@
 import argparse
+import os
 from datetime import datetime
 
 from repo_utils import load_repo
-from stats.commits import commits_per_month, commits_per_day
-from stats.authors import commits_by_author_per_month, commits_by_author_per_day
-from stats.messages import messages_per_author, most_and_least_frequent_words
-from stats.branches import commits_in_branch
-from stats.merges import merges_into_branch
+from stats.commits import commits_per_month
+from stats.authors import commits_by_author_per_month
+from stats.messages import most_and_least_frequent_words
 from stats.times import commit_times_by_hour
-from stats.commits_times import commits_over_time
 from stats.lovebirds import coauthored_commits
 from stats.lines import lines_by_author
 from stats.changes import most_changed_files
-from stats.length import analyze_commit_message_lengths
 from stats.weekdays import busiest_weekday
 from stats.streaks import longest_streak
 from stats.first_commits import first_time_contributors
 from stats.ownership import file_ownership
+from report import generate_report, write_report
 
 def main():
     current_year = str(datetime.now().year)
@@ -28,68 +26,35 @@ def main():
                         help="End date in YYYY-MM-DD format (default: now)")
     parser.add_argument("--repo", default="../itk_website",
                         help="Path to the git repository (default: ../itk_website)")
+    parser.add_argument("--output", default="pystat_report.html",
+                        help="Output HTML file path (default: pystat_report.html)")
     args = parser.parse_args()
 
     since = args.since
     until = args.until
     repo = load_repo(args.repo)
+    repo_name = os.path.basename(os.path.abspath(args.repo))
 
-    date_range = f"{since} to {until or 'now'}"
+    author_monthly, author_totals = commits_by_author_per_month(repo, since=since, until=until)
 
-    # Commit stats
-    print(f"\nCommits by author per month ({date_range}):")
-    commits_by_author_per_month(repo, since=since, until=until)
+    data = {
+        "commits_per_month": commits_per_month(repo, since=since, until=until),
+        "author_monthly": author_monthly,
+        "author_totals": author_totals,
+        "words": most_and_least_frequent_words(repo, since=since, until=until),
+        "hour_counts": commit_times_by_hour(repo, since=since, until=until),
+        "file_changes": most_changed_files(repo, since=since, until=until),
+        "lines": lines_by_author(repo, since=since, until=until),
+        "coauthored": coauthored_commits(repo, since=since, until=until),
+        "weekday_counts": busiest_weekday(repo, since=since, until=until),
+        "streaks": longest_streak(repo, since=since, until=until),
+        "new_contributors": first_time_contributors(repo, since=since, until=until),
+        "ownership": file_ownership(repo, since=since, until=until),
+    }
 
-    print(f"\nCommits by author per day ({date_range}):")
-    commits_by_author_per_day(repo, since=since, until=until)
-
-    # Commit Message stats (a lot of text)
-    # print(f"\nMessages per author ({date_range}):")
-    # messages_per_author(repo, since[:4])
-
-    # Most frequantly used words in commit messages
-    print("\n")
-    most_and_least_frequent_words(repo, since=since, until=until)
-
-    # Commit times by hour
-    print("\n")
-    commit_times_by_hour(repo, since=since, until=until)
-
-    # Changes to a file
-    print("\n")
-    most_changed_files(repo, since=since, until=until)
-
-    # Most line changes
-    print("\nLines per author")
-    lines_by_author(repo, since=since, until=until)
-
-    # Lovebirds
-    print("\nLovebirds")
-    coauthored_commits(repo, since=since, until=until)
-
-    # Commits per month
-    print("\nPer month")
-    commits_per_month(repo, since=since, until=until)
-
-    # Busiest weekday
-    print("\n")
-    busiest_weekday(repo, since=since, until=until)
-
-    # Commit streaks
-    print("\n")
-    longest_streak(repo, since=since, until=until)
-
-    # First-time contributors
-    print("\n")
-    first_time_contributors(repo, since=since, until=until)
-
-    # File ownership
-    print("\n")
-    file_ownership(repo, since=since, until=until)
-
-    # Commits lengths
-    # print("\nCommit length info")
-    # analyze_commit_message_lengths(repo)
+    html = generate_report(data, repo_name, since, until, repo_path=os.path.abspath(args.repo))
+    write_report(html, args.output)
+    print(f"Report written to {args.output}")
 
 if __name__ == "__main__":
     main()
