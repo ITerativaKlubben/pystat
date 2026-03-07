@@ -1,4 +1,7 @@
-from repo_utils import load_repo  # Importing the load_repo function
+import argparse
+from datetime import datetime
+
+from repo_utils import load_repo
 from stats.commits import commits_per_month, commits_per_day
 from stats.authors import commits_by_author_per_month, commits_by_author_per_day
 from stats.messages import messages_per_author, most_and_least_frequent_words
@@ -12,47 +15,58 @@ from stats.changes import most_changed_files
 from stats.length import analyze_commit_message_lengths
 
 def main():
-    repo_path = "../itk_website"  # Replace with your Git repository path
-    repo = load_repo(repo_path)
+    current_year = str(datetime.now().year)
+
+    parser = argparse.ArgumentParser(description="Git repository statistics")
+    parser.add_argument("--since", default=f"{current_year}-01-01",
+                        help="Start date in YYYY-MM-DD format (default: Jan 1 of current year)")
+    parser.add_argument("--until", default=None,
+                        help="End date in YYYY-MM-DD format (default: now)")
+    parser.add_argument("--repo", default="../itk_website",
+                        help="Path to the git repository (default: ../itk_website)")
+    args = parser.parse_args()
+
+    since = args.since
+    until = args.until
+    repo = load_repo(args.repo)
+
+    date_range = f"{since} to {until or 'now'}"
 
     # Commit stats
-    print("\nCommits by author per month:")
-    commits_by_author_per_month(repo, since="2024-01-01")
+    print(f"\nCommits by author per month ({date_range}):")
+    commits_by_author_per_month(repo, since=since, until=until)
 
-    print("\nCommits by author per day in July 2024:")
-    commits_by_author_per_day(repo, "2024-07", since="2024-01-01")
-
-    print("\nCommits by author per day in August 2024:")
-    commits_by_author_per_day(repo, "2024-08", since="2024-01-01")
+    print(f"\nCommits by author per day ({date_range}):")
+    commits_by_author_per_day(repo, since=since, until=until)
 
     # Commit Message stats (a lot of text)
-    # print("\nMessages per author (2024):")
-    # messages_per_author(repo, "2024")
+    # print(f"\nMessages per author ({date_range}):")
+    # messages_per_author(repo, since[:4])
 
-    # Most frequantly used words in commit messages 
+    # Most frequantly used words in commit messages
     print("\n")
-    most_and_least_frequent_words(repo)
+    most_and_least_frequent_words(repo, since=since, until=until)
 
     # Commit times by hour
     print("\n")
-    commit_times_by_hour(repo)
+    commit_times_by_hour(repo, since=since, until=until)
 
-    # Changes to a file   
+    # Changes to a file
     print("\n")
-    most_changed_files(repo)
+    most_changed_files(repo, since=since, until=until)
 
     # Most line changes
     print("\nLines per author")
-    lines_by_author(repo)
+    lines_by_author(repo, since=since, until=until)
 
     # Lovebirds
     print("\nLovebirds")
-    coauthored_commits(repo)
+    coauthored_commits(repo, since=since, until=until)
 
     # Commits per month
     print("\nPer month")
-    commits_per_month(repo)
-    
+    commits_per_month(repo, since=since, until=until)
+
     # Commits lengths
     # print("\nCommit length info")
     # analyze_commit_message_lengths(repo)

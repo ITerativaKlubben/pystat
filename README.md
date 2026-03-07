@@ -1,15 +1,41 @@
-This is the code used to get statistics for commits in ITKs Project Web. It is mostly written by ChatGPT and is not very well built, but it gets the job done.
+# pystat
 
-To run, clone the repository in the same directory where you have your ITK Project Web fork:
+Janky little script that pulls commit statistics from the ITK Project Web repo. Mostly written by AI, not pretty, but it works.
+
+## Setup
+
+Clone this repo next to your ITK Project Web fork so the folder structure looks someting like this:
+
+```
 .
 ├── itk_website
-└── pystats
+└── pystat
+```
 
-Make sure you have all the relevant python dependencies:
-`pip install -r requirements.txt`
+Then set up a venv and install deps:
 
-Run the main analyze code:
-`python3 analyze.py`
+```bash
+cd pystat
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-Some values are hardcoded and might only meassure dates around 2024 and would have to be changed for future use
+## Usage
 
+```bash
+python3 analyze.py
+```
+
+By default it grabs stats for the current year. You can narrow it down with `--since` and `--until`:
+
+```bash
+python3 analyze.py --since 2024-01-01 --until 2024-12-31
+python3 analyze.py --since 2023-06-15
+```
+
+If your repo lives somewhere else you can point to it:
+
+```bash
+python3 analyze.py --repo /path/to/your/repo
+```

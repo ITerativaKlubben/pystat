@@ -1,28 +1,32 @@
 from collections import defaultdict, Counter
+from datetime import datetime
 import re
 
-def messages_per_author(repo, year):
-    """Print commit messages grouped by author for a specific year."""
+def messages_per_author(repo, since="2024-01-01", until=None):
+    """Print commit messages grouped by author for the given date range."""
+    since_date = datetime.strptime(since, "%Y-%m-%d")
+    until_date = datetime.strptime(until, "%Y-%m-%d") if until else None
     messages_per_author = defaultdict(list)
 
-    for commit in repo.iter_commits():
-        if commit.committed_datetime.strftime("%Y") == year:
-            author = commit.author.name
-            messages_per_author[author].append(commit.message.strip())
+    for commit in repo.iter_commits(since=since_date, until=until_date):
+        author = commit.author.name
+        messages_per_author[author].append(commit.message.strip())
 
     for author, messages in messages_per_author.items():
         print(f"{author}:")
         for message in messages:
             print(f"  - {message}")
 
-def most_and_least_frequent_words(repo):
+def most_and_least_frequent_words(repo, since="2024-01-01", until=None):
     """Print the most and least frequently used words in commit messages."""
+    since_date = datetime.strptime(since, "%Y-%m-%d")
+    until_date = datetime.strptime(until, "%Y-%m-%d") if until else None
     word_counter = Counter()
     most_common_count=10
     least_common_count=10
 
-    for commit in repo.iter_commits():
-        words = re.findall(r'\b\w+\b', commit.message.lower())  # Extract words
+    for commit in repo.iter_commits(since=since_date, until=until_date):
+        words = re.findall(r'\b\w+\b', commit.message.lower())
         word_counter.update(words)
 
     print(f"Most frequently used words in commit messages (Top {most_common_count}):")
