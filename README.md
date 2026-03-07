@@ -27,6 +27,8 @@ pip install -r requirements.txt
 python3 analyze.py
 ```
 
+This generates `pystat_report.html` — a self-contained dark-themed HTML report with interactive Chart.js graphs, summary cards, leaderboards, and more. The ITK logo and default NAT are embedded automatically.
+
 By default it grabs stats for the current year. You can narrow it down with `--since` and `--until`:
 
 ```bash
@@ -39,3 +41,21 @@ If your repo lives somewhere else you can point to it:
 ```bash
 python3 analyze.py --repo /path/to/your/repo
 ```
+
+You can also change the output filename:
+
+```bash
+python3 analyze.py --output stats_2024.html
+```
+
+## Printing to PDF
+
+The report is designed for printing as a single continuous page with no breaks. To get the best result:
+
+1. Open `pystat_report.html` in a browser
+2. Press `Ctrl+P` (or `Cmd+P`)
+3. Set margins to **None**
+4. Make sure **Background graphics** is enabled (keeps the dark theme)
+5. Save as PDF
+
+The charts render at 3x resolution for sharp output.
