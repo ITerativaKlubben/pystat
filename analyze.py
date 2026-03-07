@@ -13,6 +13,10 @@ from stats.lovebirds import coauthored_commits
 from stats.lines import lines_by_author
 from stats.changes import most_changed_files
 from stats.length import analyze_commit_message_lengths
+from stats.weekdays import busiest_weekday
+from stats.streaks import longest_streak
+from stats.first_commits import first_time_contributors
+from stats.ownership import file_ownership
 
 def main():
     current_year = str(datetime.now().year)
@@ -66,6 +70,22 @@ def main():
     # Commits per month
     print("\nPer month")
     commits_per_month(repo, since=since, until=until)
+
+    # Busiest weekday
+    print("\n")
+    busiest_weekday(repo, since=since, until=until)
+
+    # Commit streaks
+    print("\n")
+    longest_streak(repo, since=since, until=until)
+
+    # First-time contributors
+    print("\n")
+    first_time_contributors(repo, since=since, until=until)
+
+    # File ownership
+    print("\n")
+    file_ownership(repo, since=since, until=until)
 
     # Commits lengths
     # print("\nCommit length info")
