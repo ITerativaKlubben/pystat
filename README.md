@@ -59,3 +59,19 @@ The report is designed for printing as a single continuous page with no breaks. 
 5. Save as PDF
 
 The charts render at 3x resolution for sharp output.
+
+## Export to PNG
+
+Convert the report to a single tall PNG image (great for sharing on Discord):
+
+```bash
+playwright install chromium  # first time only
+python3 to_png.py
+```
+
+This creates `pystat_report.png` at 2x resolution. You can tweak it:
+
+```bash
+python3 to_png.py --width 1200 --scale 3.0
+python3 to_png.py custom_report.html -o output.png
+```
