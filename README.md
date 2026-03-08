@@ -48,6 +48,32 @@ You can also change the output filename:
 python3 analyze.py --output stats_2024.html
 ```
 
+## GitHub API
+
+By default pystat pulls data straight from the GitHub API — commits, PRs, issues, CI runs, contributor profiles, the whole thing. The local git clone is only used as a fallback.
+
+Drop a `.env` file in the project root:
+
+```
+GITHUB_TOKEN=github_pat_...
+```
+
+You need a fine-grained personal access token scoped to the org/repo with read access to Contents, Pull requests, Issues, and Actions.
+
+The repo slug is auto-detected from the git remote, but you can override it:
+
+```bash
+python3 analyze.py --github-repo ITerativaKlubben/website
+```
+
+If you want to skip the API and use local git history instead:
+
+```bash
+python3 analyze.py --local
+```
+
+No token, no `.env`, no problem — it just falls back to local git automatically.
+
 ## Printing to PDF
 
 The report is designed for printing as a single continuous page with no breaks. To get the best result:

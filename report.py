@@ -16,6 +16,15 @@ def _embed_image(path):
         return f"data:{mime};base64,{base64.b64encode(f.read()).decode()}"
 
 
+def _fmt_hours(h):
+    """Format hours into a human-readable duration."""
+    if h < 1:
+        return f"{h*60:.0f}m"
+    if h < 24:
+        return f"{h:.1f}h"
+    return f"{h/24:.1f}d"
+
+
 def generate_report(data, repo_name, since, until, repo_path=None):
     """Generate a self-contained HTML report with Chart.js graphs."""
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -29,7 +38,7 @@ def generate_report(data, repo_name, since, until, repo_path=None):
         logo_src = _embed_image(os.path.join(pub, "itk_logo_1024x317.webp"))
         nat_src = _embed_image(os.path.join(pub, "footernats", "256x185", "NAT_DEFAULT_256x185.webp"))
 
-    # Summary card values
+    # ── Core data ──
     commits_per_month = data.get("commits_per_month", {})
     total_commits = sum(commits_per_month.values())
     author_totals = data.get("author_totals", {})
@@ -38,17 +47,47 @@ def generate_report(data, repo_name, since, until, repo_path=None):
     streak_days = streak_data["best_streak"] if streak_data else 0
     coauthored = data.get("coauthored", 0)
 
-    # Commits per month chart data
+    # ── GitHub data (may be None) ──
+    gh_prs = data.get("gh_pull_requests")
+    gh_issues = data.get("gh_issues")
+    gh_actions = data.get("gh_actions")
+    gh_contributors = data.get("gh_contributors")
+
+    # ── Summary cards (dynamic) ──
+    cards = []
+    cards.append(("stat", total_commits, "commits"))
+    if gh_prs:
+        cards.append(("stat alt", gh_prs["total"], "pull requests"))
+    cards.append(("stat alt" if not gh_prs else "stat", total_contributors, "contributors"))
+    if gh_actions:
+        cards.append(("stat warn", f'{gh_actions["success_rate"]}%', "ci success"))
+    if gh_issues:
+        cards.append(("stat" + (" warn" if not gh_actions else ""), gh_issues["current_open"], "open issues"))
+    cards.append(("stat warn" if not gh_actions and not gh_issues else "stat", f"{streak_days}d", "longest streak"))
+    cards.append(("stat", coauthored, "co-authored"))
+    cards_html = "\n".join(
+        f'  <div class="{cls}"><div class="val">{val}</div><div class="lbl">{lbl}</div></div>'
+        for cls, val, lbl in cards
+    )
+
+    # ── Commits per month ──
     cpm_labels = json.dumps(sorted(commits_per_month.keys()))
     cpm_values = json.dumps([commits_per_month[k] for k in sorted(commits_per_month.keys())])
 
-    # Author monthly stacked bar data
+    # ── PRs per month ──
+    pr_month_labels = "[]"
+    pr_month_values = "[]"
+    if gh_prs and gh_prs["per_month"]:
+        pm = gh_prs["per_month"]
+        pr_month_labels = json.dumps(sorted(pm.keys()))
+        pr_month_values = json.dumps([pm[k] for k in sorted(pm.keys())])
+
+    # ── Author stacked bar ──
     author_monthly = data.get("author_monthly", {})
     months_sorted = sorted(author_monthly.keys())
     all_authors = sorted(author_totals.keys(), key=lambda a: author_totals[a], reverse=True)
     author_datasets_js = _build_author_datasets(months_sorted, all_authors, author_monthly)
 
-    # Author totals table — with rank and bar visualization (colors match stacked chart)
     author_palette = [
         '#39ff14', '#22d3ee', '#fbbf24', '#a78bfa', '#f87171',
         '#fb923c', '#2dd4bf', '#e879f9', '#60a5fa', '#34d399',
@@ -63,28 +102,51 @@ def generate_report(data, repo_name, since, until, repo_path=None):
         for i, (a, c) in enumerate(author_totals_sorted)
     )
 
-    # Hour chart
+    # ── PR authors / reviewers ──
+    pr_author_rows = ""
+    pr_reviewer_rows = ""
+    if gh_prs:
+        pr_author_rows = "\n".join(
+            f'<tr><td class="c">{login}</td><td class="c num">{count}</td></tr>'
+            for login, count in gh_prs["top_authors"]
+        )
+        pr_reviewer_rows = "\n".join(
+            f'<tr><td class="c">{login}</td><td class="c num">{count}</td></tr>'
+            for login, count in gh_prs["top_reviewers"]
+        )
+
+    # ── Contributor profiles ──
+    contributor_cards_html = ""
+    if gh_contributors and gh_contributors["contributors"]:
+        contributor_cards_html = "\n".join(
+            f'<div class="avatar-card">'
+            f'<img src="{c["avatar_url"]}" alt="{c["login"]}" loading="lazy">'
+            f'<div class="ac-login"><a href="{c["profile_url"]}" target="_blank">{c["login"]}</a></div>'
+            f'<div class="ac-name">{c["name"]}</div>'
+            f'<div class="ac-count">{c["contributions"]}</div>'
+            f'</div>'
+            for c in gh_contributors["contributors"]
+        )
+
+    # ── Hour / weekday ──
     hour_counts = data.get("hour_counts", None)
     hour_labels = json.dumps([f"{h:02d}:00" for h in range(24)])
     hour_values = json.dumps([hour_counts.get(h, 0) for h in range(24)] if hour_counts else [])
 
-    # Weekday chart
     weekday_counts = data.get("weekday_counts", None)
     weekday_labels = json.dumps(WEEKDAY_NAMES)
     weekday_values = json.dumps([weekday_counts.get(d, 0) for d in range(7)] if weekday_counts else [])
 
-    # Lines by author
+    # ── Lines by author ──
     lines_data = data.get("lines", {})
     lines_authors = sorted(lines_data.keys(), key=lambda a: lines_data[a]["added"], reverse=True)
     lines_labels = json.dumps(lines_authors)
     lines_added = json.dumps([lines_data[a]["added"] for a in lines_authors])
     lines_removed = json.dumps([lines_data[a]["removed"] for a in lines_authors])
-
-    # Lines summary
     total_added = sum(lines_data[a]["added"] for a in lines_authors)
     total_removed = sum(lines_data[a]["removed"] for a in lines_authors)
 
-    # Most changed files (top 10) — colored by top-level folder
+    # ── Most changed files ──
     file_changes = data.get("file_changes", {})
     top_files = file_changes.most_common(10) if hasattr(file_changes, 'most_common') else sorted(file_changes.items(), key=lambda x: x[1], reverse=True)[:10]
     files_labels = json.dumps([f[0] for f in top_files])
@@ -106,15 +168,13 @@ def generate_report(data, repo_name, since, until, repo_path=None):
             folder_idx += 1
         files_colors.append(folder_color_map[folder])
     files_colors_js = json.dumps(files_colors)
-
-    # Legend entries for folder colors
     files_legend_html = " ".join(
         f'<span style="margin-right:1rem;font-size:0.75rem;color:var(--text-dim)">'
         f'<span style="color:{color}">\u25cf</span> {folder}</span>'
         for folder, color in folder_color_map.items()
     )
 
-    # File ownership table
+    # ── File ownership ──
     ownership = data.get("ownership", {})
     sorted_ownership = sorted(ownership.items(), key=lambda x: sum(x[1].values()), reverse=True)[:15]
     ownership_rows = "\n".join(
@@ -122,7 +182,102 @@ def generate_report(data, repo_name, since, until, repo_path=None):
         for file, authors in sorted_ownership
     )
 
-    # Word frequency
+    # ── PR details ──
+    pr_details_html = ""
+    if gh_prs:
+        pr_details_html = f'''<section>
+  <div class="sec-head"><h2>Pull Request Details</h2></div>
+  <div class="sec-body" style="padding:0;">
+    <div class="detail-grid">
+      <div class="di"><div class="dl">Total</div><div class="dv glow">{gh_prs["total"]}</div></div>
+      <div class="di"><div class="dl">Merged</div><div class="dv">{gh_prs["merged"]}</div></div>
+      <div class="di"><div class="dl">Open</div><div class="dv">{gh_prs["open"]}</div></div>
+      <div class="di"><div class="dl">Closed (unmerged)</div><div class="dv">{gh_prs["closed"]}</div></div>
+      <div class="di"><div class="dl">Avg Merge Time</div><div class="dv">{_fmt_hours(gh_prs["avg_merge_hours"])}</div></div>
+      <div class="di"><div class="dl">Median Merge Time</div><div class="dv">{_fmt_hours(gh_prs["median_merge_hours"])}</div></div>
+    </div>
+  </div>
+</section>'''
+
+    # ── Issues ──
+    issues_html = ""
+    if gh_issues:
+        issues_html = f'''<section>
+  <div class="sec-head"><h2>Issues</h2></div>
+  <div class="sec-body" style="padding:0;">
+    <div class="detail-grid">
+      <div class="di"><div class="dl">Currently Open</div><div class="dv glow">{gh_issues["current_open"]}</div></div>
+      <div class="di"><div class="dl">Opened in Range</div><div class="dv">{gh_issues["opened"]}</div></div>
+      <div class="di"><div class="dl">Closed in Range</div><div class="dv">{gh_issues["closed"]}</div></div>
+      <div class="di"><div class="dl">Avg Resolution</div><div class="dv">{_fmt_hours(gh_issues["avg_resolution_hours"])}</div></div>
+    </div>
+  </div>
+</section>'''
+
+    # ── CI / Actions ──
+    actions_html = ""
+    actions_js = ""
+    if gh_actions:
+        avg_dur = gh_actions["avg_duration_sec"]
+        dur_str = f"{avg_dur:.0f}s" if avg_dur < 60 else f"{avg_dur/60:.1f}m"
+        total_dur = gh_actions["total_duration_sec"]
+        if total_dur < 60:
+            total_dur_str = f"{total_dur:.0f}s"
+        elif total_dur < 3600:
+            total_dur_str = f"{total_dur/60:.1f}m"
+        else:
+            total_dur_str = f"{total_dur/3600:.1f}h"
+        wf_rows = "\n".join(
+            f'<tr><td class="c">{wf}</td><td class="c num">{d["total"]}</td>'
+            f'<td class="c num">{d["success"]}</td><td class="c num">{d["failure"]}</td>'
+            f'<td class="c num">{d["success"]*100//d["total"] if d["total"] else 0}%</td></tr>'
+            for wf, d in sorted(gh_actions["per_workflow"].items(), key=lambda x: x[1]["total"], reverse=True)
+        )
+        wf_table = ""
+        if wf_rows:
+            wf_table = f'''<section>
+  <div class="sec-head"><h2>Workflows</h2></div>
+  <div class="sec-body" style="padding:0;">
+    <table>
+      <thead><tr><th>Workflow</th><th style="text-align:right">Runs</th><th style="text-align:right">Pass</th><th style="text-align:right">Fail</th><th style="text-align:right">Rate</th></tr></thead>
+      <tbody>{wf_rows}</tbody>
+    </table>
+  </div>
+</section>'''
+        actions_html = f'''<section>
+  <div class="sec-head"><h2>CI / Actions</h2></div>
+  <div class="sec-body" style="display:flex;align-items:center;gap:2rem;flex-wrap:wrap;">
+    <div style="width:180px;height:180px;"><canvas id="actionsChart"></canvas></div>
+    <div class="detail-grid" style="flex:1;min-width:200px;">
+      <div class="di"><div class="dl">Total Runs</div><div class="dv glow">{gh_actions["total"]}</div></div>
+      <div class="di"><div class="dl">Success Rate</div><div class="dv">{gh_actions["success_rate"]}%</div></div>
+      <div class="di"><div class="dl">Avg Duration</div><div class="dv">{dur_str}</div></div>
+      <div class="di"><div class="dl">Total Time</div><div class="dv">{total_dur_str}</div></div>
+    </div>
+  </div>
+</section>
+{wf_table}'''
+        actions_js = f'''
+new Chart(document.getElementById('actionsChart'), {{
+  type: 'doughnut',
+  data: {{
+    labels: ['Success', 'Failure', 'Other'],
+    datasets: [{{
+      data: [{gh_actions["success"]}, {gh_actions["failure"]}, {gh_actions["other"]}],
+      backgroundColor: [NEON_DIM, RED, AMBER],
+      borderWidth: 0
+    }}]
+  }},
+  options: {{
+    responsive: true,
+    maintainAspectRatio: true,
+    plugins: {{
+      legend: {{ position: 'bottom', labels: {{ boxWidth: 10, padding: 6, font: {{ size: 10 }} }} }}
+    }}
+  }}
+}});'''
+
+    # ── Words ──
     word_counter = data.get("words", {})
     most_common_words = word_counter.most_common(10) if hasattr(word_counter, 'most_common') else []
     word_labels = json.dumps([w[0] for w in most_common_words])
@@ -136,7 +291,7 @@ def generate_report(data, repo_name, since, until, repo_path=None):
         for w, c in least_common_words
     )
 
-    # New contributors table
+    # ── New contributors ──
     new_contributors = data.get("new_contributors", {})
     contributors_sorted = sorted(new_contributors.items(), key=lambda x: x[1])
     contributors_rows = "\n".join(
@@ -144,13 +299,15 @@ def generate_report(data, repo_name, since, until, repo_path=None):
         for a, d in contributors_sorted
     )
 
-    # Streak details
+    # ── Streak ──
     streak_length = streak_data["best_streak"] if streak_data else "—"
     streak_range = f'{streak_data["best_start"]} to {streak_data["best_end"]}' if streak_data else "—"
     streak_active = streak_data["total_days_with_commits"] if streak_data else "—"
-
-    # Avg commits per active day
     avg_per_day = f"{total_commits / streak_active:.1f}" if isinstance(streak_active, int) and streak_active > 0 else "—"
+
+    # ── Dynamic card grid columns ──
+    n_cards = len(cards)
+    card_cols = 4 if n_cards <= 4 else n_cards
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -234,7 +391,7 @@ def generate_report(data, repo_name, since, until, repo_path=None):
   /* ── stat cards ── */
   .stats {{
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat({card_cols}, 1fr);
     gap: 1px;
     background: var(--border);
     border: 1px solid var(--border);
@@ -357,6 +514,43 @@ def generate_report(data, repo_name, since, until, repo_path=None):
   .inline-stats strong {{ color: var(--neon); }}
   .inline-stats .del {{ color: var(--red); }}
 
+  /* ── avatar grid ── */
+  .avatar-grid {{
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 1px;
+    background: var(--border);
+  }}
+  .avatar-card {{
+    background: var(--surface2);
+    padding: 1rem;
+    text-align: center;
+  }}
+  .avatar-card img {{
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 2px solid var(--border-bright);
+    margin-bottom: 0.5rem;
+  }}
+  .avatar-card .ac-login {{
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--cyan);
+  }}
+  .avatar-card .ac-login a {{ color: inherit; text-decoration: none; }}
+  .avatar-card .ac-login a:hover {{ text-decoration: underline; }}
+  .avatar-card .ac-name {{
+    font-size: 0.65rem;
+    color: var(--text-dim);
+  }}
+  .avatar-card .ac-count {{
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--neon);
+    margin-top: 0.25rem;
+  }}
+
   /* ── footer ── */
   footer {{
     text-align: center;
@@ -378,7 +572,7 @@ def generate_report(data, repo_name, since, until, repo_path=None):
       text-rendering: optimizeLegibility;
     }}
     .wrap {{ padding: 1rem; max-width: 100%; }}
-    .stats {{ grid-template-columns: repeat(4, 1fr); }}
+    .stats {{ grid-template-columns: repeat({card_cols}, 1fr); }}
     .cols {{ grid-template-columns: 1fr 1fr; }}
   }}
   @media (max-width: 700px) {{
@@ -405,22 +599,26 @@ def generate_report(data, repo_name, since, until, repo_path=None):
   </div>
 </header>
 
+<!-- ── Summary ── -->
 <div class="stats">
-  <div class="stat"><div class="val">{total_commits}</div><div class="lbl">commits</div></div>
-  <div class="stat alt"><div class="val">{total_contributors}</div><div class="lbl">contributors</div></div>
-  <div class="stat warn"><div class="val">{streak_days}d</div><div class="lbl">longest streak</div></div>
-  <div class="stat"><div class="val">{coauthored}</div><div class="lbl">co-authored</div></div>
+{cards_html}
 </div>
 
-<!-- Commits per Month -->
+<!-- ── Activity over time ── -->
+{"<div class='cols'>" if gh_prs and gh_prs["per_month"] else ""}
 <section>
-  <div class="sec-head"><h2>Commits per Month</h2><span class="tag">bar</span></div>
+  <div class="sec-head"><h2>Commits per Month</h2></div>
   <div class="sec-body"><canvas id="cpmChart"></canvas></div>
 </section>
+{f'''<section>
+  <div class="sec-head"><h2>Pull Requests opened per Month</h2></div>
+  <div class="sec-body"><canvas id="prChart"></canvas></div>
+</section>''' if gh_prs and gh_prs["per_month"] else ""}
+{"</div>" if gh_prs and gh_prs["per_month"] else ""}
 
-<!-- Commits by Author -->
+<!-- ── People ── -->
 <section>
-  <div class="sec-head"><h2>Commits by Author</h2><span class="tag">stacked</span></div>
+  <div class="sec-head"><h2>Commits by Author</h2></div>
   <div class="sec-body"><canvas id="authorChart"></canvas></div>
 </section>
 <section>
@@ -433,21 +631,43 @@ def generate_report(data, repo_name, since, until, repo_path=None):
   </div>
 </section>
 
+{f'''<div class="cols">
+<section>
+  <div class="sec-head"><h2>Top PR Authors</h2></div>
+  <div class="sec-body" style="padding:0;">
+    {"""<div class='no-data' style='padding:1rem;'>No PR data.</div>""" if not gh_prs["top_authors"] else f'<table><thead><tr><th>Author</th><th style="text-align:right">PRs</th></tr></thead><tbody>{pr_author_rows}</tbody></table>'}
+  </div>
+</section>
+<section>
+  <div class="sec-head"><h2>Top Reviewers</h2></div>
+  <div class="sec-body" style="padding:0;">
+    {"""<div class='no-data' style='padding:1rem;'>No review data.</div>""" if not gh_prs["top_reviewers"] else f'<table><thead><tr><th>Reviewer</th><th style="text-align:right">Reviews</th></tr></thead><tbody>{pr_reviewer_rows}</tbody></table>'}
+  </div>
+</section>
+</div>''' if gh_prs else ""}
+
+{f'''<section>
+  <div class="sec-head"><h2>Contributors</h2></div>
+  <div class="sec-body" style="padding:0;">
+    <div class="avatar-grid">
+      {contributor_cards_html}
+    </div>
+  </div>
+</section>''' if contributor_cards_html else ""}
+
+<!-- ── Timing ── -->
 <div class="cols">
-<!-- Commit Activity by Hour -->
 <section>
   <div class="sec-head"><h2>Activity by Hour</h2><span class="tag">24h</span></div>
   <div class="sec-body"><canvas id="hourChart"></canvas></div>
 </section>
-
-<!-- Busiest Weekday -->
 <section>
   <div class="sec-head"><h2>Weekday</h2><span class="tag">7d</span></div>
   <div class="sec-body"><canvas id="weekdayChart"></canvas></div>
 </section>
 </div>
 
-<!-- Lines by Author -->
+<!-- ── Code ── -->
 <section>
   <div class="sec-head"><h2>Lines Changed</h2><span class="tag">insertions / deletions</span></div>
   <div class="inline-stats">
@@ -458,14 +678,12 @@ def generate_report(data, repo_name, since, until, repo_path=None):
   <div class="sec-body"><canvas id="linesChart"></canvas></div>
 </section>
 
-<!-- Most Changed Files -->
 <section>
   <div class="sec-head"><h2>Hottest Files</h2><span class="tag">top 10</span></div>
   <div style="padding:0.5rem 1.25rem 0;">{files_legend_html}</div>
   <div class="sec-body"><canvas id="filesChart"></canvas></div>
 </section>
 
-<!-- File Ownership -->
 <section>
   <div class="sec-head"><h2>File Ownership</h2><span class="tag">top 15</span></div>
   <div class="sec-body" style="padding:0;">
@@ -476,14 +694,17 @@ def generate_report(data, repo_name, since, until, repo_path=None):
   </div>
 </section>
 
+<!-- ── Workflow ── -->
+{pr_details_html}
+{issues_html}
+{actions_html}
+
+<!-- ── Misc ── -->
 <div class="cols">
-<!-- Commit Message Words -->
 <section>
-  <div class="sec-head"><h2>Top Words</h2><span class="tag">commit msgs</span></div>
+  <div class="sec-head"><h2>Top Words</h2><span class="tag">commit messages</span></div>
   <div class="sec-body"><canvas id="wordsChart"></canvas></div>
 </section>
-
-<!-- Least Frequent Words -->
 <section>
   <div class="sec-head"><h2>Rare Words</h2><span class="tag">least used</span></div>
   <div class="sec-body" style="padding:0;">
@@ -495,9 +716,8 @@ def generate_report(data, repo_name, since, until, repo_path=None):
 </section>
 </div>
 
-<!-- New Contributors -->
 <section>
-  <div class="sec-head"><h2>New Contributors</h2><span class="tag">first commit in range</span></div>
+  <div class="sec-head"><h2>New Contributors</h2></div>
   <div class="sec-body" style="padding:0;">
     {"<div class='no-data' style='padding:1rem;'>No new contributors in this period.</div>" if not new_contributors else f'''<table>
       <thead><tr><th>Author</th><th>First Commit</th></tr></thead>
@@ -506,7 +726,6 @@ def generate_report(data, repo_name, since, until, repo_path=None):
   </div>
 </section>
 
-<!-- Streak Details -->
 <section>
   <div class="sec-head"><h2>Streak &amp; Activity</h2></div>
   <div class="sec-body" style="padding:0;">
@@ -541,7 +760,6 @@ const gridY = {{ color: GRID }};
 const noGrid = {{ display: false }};
 const noLegend = {{ legend: {{ display: false }} }};
 
-// Per-bar color cycling palette
 const PALETTE = ['#39ff14','#22d3ee','#fbbf24','#a78bfa','#f87171','#fb923c','#2dd4bf','#e879f9','#60a5fa','#34d399','#f472b6','#facc15'];
 function cycle(data) {{ return data.map((_,i) => PALETTE[i % PALETTE.length]); }}
 
@@ -557,6 +775,20 @@ new Chart(document.getElementById('cpmChart'), {{
   }}
 }});
 
+// PRs per Month
+if (document.getElementById('prChart')) {{
+  new Chart(document.getElementById('prChart'), {{
+    type: 'bar',
+    data: {{
+      labels: {pr_month_labels},
+      datasets: [{{ data: {pr_month_values}, backgroundColor: cycle({pr_month_values}), borderRadius: 2 }}]
+    }},
+    options: {{ responsive: true, plugins: noLegend,
+      scales: {{ y: {{ beginAtZero: true, grid: gridY }}, x: {{ grid: noGrid }} }}
+    }}
+  }});
+}}
+
 // Author stacked bar
 new Chart(document.getElementById('authorChart'), {{
   type: 'bar',
@@ -570,13 +802,13 @@ new Chart(document.getElementById('authorChart'), {{
   }}
 }});
 
-// Hour chart — gradient from cool to warm across 24h
+// Hour chart
 const hourColors = {hour_values}.map((_,i) => {{
   const t = i / 23;
-  if (t < 0.25) return '#60a5fa';      // night — blue
-  if (t < 0.5) return '#fbbf24';       // morning — amber
-  if (t < 0.75) return '#fb923c';      // afternoon — orange
-  return '#a78bfa';                     // evening — purple
+  if (t < 0.25) return '#60a5fa';
+  if (t < 0.5) return '#fbbf24';
+  if (t < 0.75) return '#fb923c';
+  return '#a78bfa';
 }});
 new Chart(document.getElementById('hourChart'), {{
   type: 'bar',
@@ -618,7 +850,7 @@ new Chart(document.getElementById('linesChart'), {{
   }}
 }});
 
-// Most changed files — colored by folder
+// Most changed files
 new Chart(document.getElementById('filesChart'), {{
   type: 'bar',
   data: {{
@@ -630,7 +862,7 @@ new Chart(document.getElementById('filesChart'), {{
   }}
 }});
 
-// Word frequency chart
+// Word frequency
 new Chart(document.getElementById('wordsChart'), {{
   type: 'bar',
   data: {{
@@ -641,6 +873,8 @@ new Chart(document.getElementById('wordsChart'), {{
     scales: {{ y: {{ beginAtZero: true, grid: gridY }}, x: {{ grid: noGrid }} }}
   }}
 }});
+
+{actions_js}
 
 // Set @page size to actual content height to avoid dead space in PDF
 window.addEventListener('beforeprint', () => {{

@@ -1,2 +1,4 @@
 gitpython
 playwright
+PyGithub
+python-dotenv
